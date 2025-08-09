@@ -1,90 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Configuração
-    const TELEGRAM_BOT_TOKEN = '8429002910:AAEh0Ga1E5VInwSa1HSLs43k51ErxU5ezaI';
-    const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
-    
-    let leads = [
-        { 
-            id: 1, 
-            name: 'Ana Silva', 
-            company: 'InovaTech', 
-            status: 'mql', 
-            score: 87, 
-            hyperForm: 95, 
-            stratForm: 50000, 
-            verifyTM: 15000, 
-            notes: 'Interesse em automação.', 
-            nextAction: 'Agendar Reunião', 
-            nextActionTarget: 'https://calendly.com/ana-silva', 
-            telegramChatId: '598132858', 
-            telegramUsername: '@FNWAdvisory', 
-            conversation: [
-                {sender: 'lead', text: 'Olá, gostaria de saber mais sobre seus serviços.', time: new Date().toLocaleTimeString(), source: 'telegram'},
-                {sender: 'rosana', text: 'Olá Ana! Sou a assistente virtual da FNW. Como posso ajudá-la hoje?', time: new Date().toLocaleTimeString(), source: 'rosana'},
-                {sender: 'agent', text: 'Oi Ana! Vi que você tem interesse em automação. Que tal agendar uma conversa?', time: new Date().toLocaleTimeString(), source: 'crm'}
-            ]
-        },
-        { 
-            id: 2, 
-            name: 'Bruno Costa', 
-            company: 'Nexus Log', 
-            status: 'mql', 
-            score: 72, 
-            hyperForm: 60, 
-            stratForm: 25000, 
-            verifyTM: 5000, 
-            notes: '', 
-            nextAction: '', 
-            nextActionTarget: '', 
-            telegramChatId: '123456789', 
-            telegramUsername: '@bruno_costa', 
-            conversation: [
-                {sender: 'lead', text: 'Vi um anúncio de vocês no LinkedIn.', time: new Date().toLocaleTimeString(), source: 'telegram'},
-                {sender: 'rosana', text: 'Que ótimo, Bruno! Qual sua principal necessidade hoje?', time: new Date().toLocaleTimeString(), source: 'rosana'}
-            ]
-        },
-        { 
-            id: 3, 
-            name: 'Carla Dias', 
-            company: 'Saúde Farma', 
-            status: 'sal', 
-            score: 92, 
-            hyperForm: 88, 
-            stratForm: 120000, 
-            verifyTM: 40000, 
-            notes: 'Decisora final.', 
-            nextAction: 'Ligar', 
-            nextActionTarget: '+55 11 99999-8888', 
-            telegramChatId: '456789123', 
-            telegramUsername: '@carla_dias', 
-            conversation: [
-                {sender: 'rosana', text: 'Olá Carla, vi que baixou nosso e-book sobre gestão farmacêutica.', time: new Date().toLocaleTimeString(), source: 'rosana'},
-                {sender: 'lead', text: 'Sim! Preciso muito organizar as vendas da farmácia.', time: new Date().toLocaleTimeString(), source: 'telegram'},
-                {sender: 'system', text: 'Lead qualificado automaticamente pela Rosana.io', time: new Date().toLocaleTimeString(), source: 'system'}
-            ]
-        },
-        { 
-            id: 4, 
-            name: 'Daniel Martins', 
-            company: 'EducaMais', 
-            status: 'sql', 
-            score: 95, 
-            hyperForm: 92, 
-            stratForm: 85000, 
-            verifyTM: 20000, 
-            notes: 'Demo realizada.', 
-            nextAction: 'Enviar Proposta', 
-            nextActionTarget: 'daniel.martins@educamais.com', 
-            telegramChatId: '789123456', 
-            telegramUsername: '@daniel_martins', 
-            conversation: [
-                {sender: 'rosana', text: 'Daniel, sua demo foi agendada com sucesso!', time: new Date().toLocaleTimeString(), source: 'rosana'},
-                {sender: 'agent', text: 'Ótimo, Daniel! O próximo passo é uma conversa com um especialista.', time: new Date().toLocaleTimeString(), source: 'crm'},
-                {sender: 'system', text: 'Reunião agendada via Calendly.', time: new Date().toLocaleTimeString(), source: 'system'}
-            ]
-        }
-    ];
-    
+    // Configuração - Webhook Only Mode
+    // Token agora é usado apenas pela Rosana.io
+    const WEBHOOK_MODE = true;
+
+    // Começar com array vazio - leads serão criados via webhook ou manualmente
+    let leads = [];
+
     let activeLeadId = null;
     let deletedLead = null;
     let undoTimeout = null;
@@ -120,7 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
         toast.className = `toast ${type}`;
         toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'exclamation-triangle'}"></i> ${message}`;
         document.body.appendChild(toast);
-        
+
         setTimeout(() => toast.classList.add('show'), 100);
         setTimeout(() => {
             toast.classList.remove('show');
@@ -128,80 +49,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 3000);
     };
 
-    // Função para enviar mensagem via Telegram API
-    const sendTelegramMessage = async (chatId, message) => {
-        try {
-            const response = await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    chat_id: chatId,
-                    text: message,
-                    parse_mode: 'HTML'
-                })
+    // Função para receber dados via webhook da Rosana.io
+    const processWebhookMessage = (webhookData) => {
+        const { chatId, message, userName, source } = webhookData;
+
+        // Encontrar lead correspondente pelo chatId
+        const lead = leads.find(l => l.telegramChatId === chatId);
+        if (lead) {
+            lead.conversation.push({
+                sender: source === 'rosana' ? 'rosana' : 'lead',
+                text: message,
+                time: new Date().toLocaleTimeString(),
+                source: source || 'rosana'
             });
-            
-            const result = await response.json();
-            if (result.ok) {
-                showToast('Mensagem enviada via Telegram!', 'success');
-                return true;
-            } else {
-                showToast(`Erro ao enviar: ${result.description}`, 'error');
-                return false;
+
+            // Destacar card com nova mensagem
+            const leadCard = document.querySelector(`[data-lead-id="${lead.id}"]`);
+            if (leadCard) {
+                leadCard.classList.add('new-message');
+                setTimeout(() => leadCard.classList.remove('new-message'), 5000);
             }
-        } catch (error) {
-            showToast(`Erro de conexão: ${error.message}`, 'error');
-            return false;
+
+            // Se este lead está ativo, atualizar o chat
+            if (activeLeadId === lead.id) {
+                renderChat(lead.id);
+            }
+
+            showToast(`Nova mensagem de ${lead.name} via Rosana.io!`, 'success');
         }
     };
 
-    // Função para buscar mensagens do Telegram
-    const getTelegramUpdates = async () => {
-        try {
-            const response = await fetch(`${TELEGRAM_API_URL}/getUpdates?offset=${lastUpdateId + 1}`);
-            const result = await response.json();
-            
-            if (result.ok && result.result.length > 0) {
-                result.result.forEach(update => {
-                    if (update.message && update.message.text) {
-                        const chatId = update.message.chat.id.toString();
-                        const text = update.message.text;
-                        const senderName = update.message.from.first_name;
-                        
-                        // Encontrar lead correspondente
-                        const lead = leads.find(l => l.telegramChatId === chatId);
-                        if (lead) {
-                            lead.conversation.push({
-                                sender: 'lead',
-                                text: text,
-                                time: new Date().toLocaleTimeString(),
-                                source: 'telegram'
-                            });
-                            
-                            // Destacar card com nova mensagem
-                            const leadCard = document.querySelector(`[data-lead-id="${lead.id}"]`);
-                            if (leadCard) {
-                                leadCard.classList.add('new-message');
-                                setTimeout(() => leadCard.classList.remove('new-message'), 5000);
-                            }
-                            
-                            // Se este lead está ativo, atualizar o chat
-                            if (activeLeadId === lead.id) {
-                                renderChat(lead.id);
-                            }
-                            
-                            showToast(`Nova mensagem de ${lead.name}!`, 'success');
-                        }
-                        
-                        lastUpdateId = update.update_id;
-                    }
-                });
-            }
-        } catch (error) {
-            console.error('Erro ao buscar atualizações:', error);
-        }
+    // Polling para verificar novos dados do webhook (simulação)
+    const checkWebhookUpdates = () => {
+        // Esta função será substituída pela integração real do webhook
+        // Por enquanto, mantém a simulação da Rosana.io
     };
 
     // Função para simular webhook da Rosana.io
@@ -217,37 +98,34 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Posso conectá-lo com um especialista.',
                     'Que tal conhecer nossos cases de sucesso?'
                 ];
-                
+
                 const randomMessage = rosanaMessages[Math.floor(Math.random() * rosanaMessages.length)];
-                
+
                 randomLead.conversation.push({
                     sender: 'rosana',
                     text: randomMessage,
                     time: new Date().toLocaleTimeString(),
                     source: 'rosana'
                 });
-                
+
                 // Destacar card
                 const leadCard = document.querySelector(`[data-lead-id="${randomLead.id}"]`);
                 if (leadCard) {
                     leadCard.classList.add('new-message');
                     setTimeout(() => leadCard.classList.remove('new-message'), 5000);
                 }
-                
+
                 // Atualizar chat se ativo
                 if (activeLeadId === randomLead.id) {
                     renderChat(randomLead.id);
                 }
-                
+
                 showToast(`Rosana.io respondeu para ${randomLead.name}`, 'success');
             }
         }, 30000);
     };
 
-    // Polling para novas mensagens a cada 5 segundos
-    setInterval(getTelegramUpdates, 5000);
-    
-    // Iniciar simulação da Rosana.io
+    // Iniciar simulação da Rosana.io (será substituída pelo webhook real)
     simulateRosanaWebhook();
 
     const updateUndoButton = () => {
@@ -268,11 +146,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         deletedLead = { ...leads[leadIndex] };
         leads.splice(leadIndex, 1);
-        
+
         if (undoTimeout) {
             clearTimeout(undoTimeout);
         }
-        
+
         undoTimeout = setTimeout(() => {
             deletedLead = null;
             updateUndoButton();
@@ -297,12 +175,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         leads.push(deletedLead);
         showToast(`Lead "${deletedLead.name}" restaurado com sucesso!`, 'success');
-        
+
         if (undoTimeout) {
             clearTimeout(undoTimeout);
             undoTimeout = null;
         }
-        
+
         deletedLead = null;
         updateUndoButton();
         renderBoard();
@@ -332,7 +210,7 @@ document.addEventListener('DOMContentLoaded', () => {
             kanbanBoard.appendChild(columnEl);
         }
         addEventListeners();
-        if(activeLeadId) {
+        if (activeLeadId) {
             document.querySelector(`[data-lead-id="${activeLeadId}"]`)?.classList.add('active');
         }
     };
@@ -342,7 +220,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.className = 'lead-card';
         card.draggable = true;
         card.dataset.leadId = lead.id;
-        
+
         let nextActionHTML = '';
         if (lead.nextAction && lead.nextActionTarget) {
             nextActionHTML = `<div class="next-action-summary"><i class="fas fa-robot"></i> <strong>${lead.nextAction} para:</strong> <span class="action-target">${lead.nextActionTarget}</span></div>`;
@@ -382,23 +260,23 @@ document.addEventListener('DOMContentLoaded', () => {
             sendBtn.disabled = true;
             return;
         }
-        
+
         activeLeadId = leadId;
         chatHeader.textContent = `${lead.name} ${lead.telegramUsername ? lead.telegramUsername : ''}`;
         chatArea.innerHTML = '';
-        
+
         lead.conversation.forEach(msg => {
             const bubble = document.createElement('div');
             bubble.className = `chat-bubble bubble-${msg.sender}`;
-            
+
             let sourceIcon = '';
-            switch(msg.source) {
+            switch (msg.source) {
                 case 'telegram': sourceIcon = '<i class="fab fa-telegram-plane"></i>'; break;
                 case 'rosana': sourceIcon = '<i class="fas fa-robot"></i>'; break;
                 case 'crm': sourceIcon = '<i class="fas fa-user-tie"></i>'; break;
                 case 'system': sourceIcon = '<i class="fas fa-cog"></i>'; break;
             }
-            
+
             bubble.innerHTML = `
                 <div>${msg.text}</div>
                 <div class="message-time">${msg.time}</div>
@@ -406,9 +284,9 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             chatArea.appendChild(bubble);
         });
-        
+
         chatArea.scrollTop = chatArea.scrollHeight;
-        
+
         // Habilitar input se tiver chat ID
         if (lead.telegramChatId) {
             messageInput.disabled = false;
@@ -419,7 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sendBtn.disabled = true;
             messageInput.placeholder = 'Chat ID não configurado';
         }
-        
+
         document.querySelectorAll('.lead-card').forEach(c => c.classList.remove('active'));
         document.querySelector(`[data-lead-id="${leadId}"]`)?.classList.add('active');
     };
@@ -434,7 +312,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Adicionar mensagem localmente primeiro
+        // No modo webhook, apenas adicionar mensagem localmente
+        // A Rosana.io é responsável pelo envio real via Telegram
         lead.conversation.push({
             sender: 'agent',
             text: message,
@@ -446,16 +325,9 @@ document.addEventListener('DOMContentLoaded', () => {
         renderChat(activeLeadId);
         messageInput.value = '';
 
-        // Enviar via Telegram API
-        const success = await sendTelegramMessage(lead.telegramChatId, message);
-        
-        if (!success) {
-            // Se falhou, remover a mensagem local
-            lead.conversation.pop();
-            renderChat(activeLeadId);
-        }
+        showToast('Mensagem adicionada ao CRM (Rosana.io gerencia o envio)', 'success');
     };
-    
+
     const openLeadFormModal = (leadId = null) => {
         leadForm.reset();
         const statusSelect = document.getElementById('leadStatus');
@@ -490,26 +362,26 @@ document.addEventListener('DOMContentLoaded', () => {
         updateActionTargetInput();
         leadFormModal.classList.add('visible');
     };
-    
+
     const updateActionTargetInput = () => {
         const action = document.getElementById('nextActionSelect').value;
         const targetInput = document.getElementById('nextActionTarget');
-        switch(action) {
-            case 'Ligar': 
-                targetInput.type = 'tel'; 
-                targetInput.placeholder = '+55 11 99999-8888'; 
+        switch (action) {
+            case 'Ligar':
+                targetInput.type = 'tel';
+                targetInput.placeholder = '+55 11 99999-8888';
                 break;
-            case 'Agendar Reunião': 
-                targetInput.type = 'url'; 
-                targetInput.placeholder = 'https://calendly.com/seu-link'; 
+            case 'Agendar Reunião':
+                targetInput.type = 'url';
+                targetInput.placeholder = 'https://calendly.com/seu-link';
                 break;
-            case 'Enviar Proposta': 
-            case 'Follow-up': 
-                targetInput.type = 'email'; 
-                targetInput.placeholder = 'exemplo@email.com'; 
+            case 'Enviar Proposta':
+            case 'Follow-up':
+                targetInput.type = 'email';
+                targetInput.placeholder = 'exemplo@email.com';
                 break;
-            default: 
-                targetInput.type = 'text'; 
+            default:
+                targetInput.type = 'text';
                 targetInput.placeholder = 'Preencha após escolher a ação';
         }
     };
@@ -543,8 +415,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             leadData.id = new Date().getTime();
             leadData.conversation = [{
-                sender: 'system', 
-                text: 'Lead criado manualmente no CRM.', 
+                sender: 'system',
+                text: 'Lead criado manualmente no CRM.',
                 time: new Date().toLocaleTimeString(),
                 source: 'system'
             }];
@@ -552,13 +424,13 @@ document.addEventListener('DOMContentLoaded', () => {
             lead = leadData;
             showToast(`Lead "${lead.name}" criado com sucesso!`, 'success');
         }
-        
+
         if (lead && lead.nextAction && lead.nextActionTarget) {
             const systemMessage = `Comando: ${lead.nextAction} para ${lead.nextActionTarget}.`;
             if (!lead.conversation.some(msg => msg.text === systemMessage)) {
                 lead.conversation.push({
-                    sender: 'system', 
-                    text: systemMessage, 
+                    sender: 'system',
+                    text: systemMessage,
                     time: new Date().toLocaleTimeString(),
                     source: 'system'
                 });
@@ -569,32 +441,32 @@ document.addEventListener('DOMContentLoaded', () => {
         leadFormModal.classList.remove('visible');
         renderBoard();
     };
-    
+
     const addEventListeners = () => {
         document.querySelectorAll('.lead-card').forEach(card => {
-            card.addEventListener('dragstart', e => { 
-                e.stopPropagation(); 
-                card.classList.add('dragging'); 
-                e.dataTransfer.setData('text/plain', card.dataset.leadId); 
+            card.addEventListener('dragstart', e => {
+                e.stopPropagation();
+                card.classList.add('dragging');
+                e.dataTransfer.setData('text/plain', card.dataset.leadId);
             });
-            card.addEventListener('dragend', (e) => { 
-                e.stopPropagation(); 
-                card.classList.remove('dragging'); 
+            card.addEventListener('dragend', (e) => {
+                e.stopPropagation();
+                card.classList.remove('dragging');
             });
-            card.addEventListener('click', (e) => { 
+            card.addEventListener('click', (e) => {
                 if (!e.target.closest('.lead-card-actions')) {
-                    e.stopPropagation(); 
-                    renderChat(parseInt(card.dataset.leadId)); 
+                    e.stopPropagation();
+                    renderChat(parseInt(card.dataset.leadId));
                 }
             });
-            
-            card.querySelector('.edit-lead-btn').addEventListener('click', (e) => { 
-                e.stopPropagation(); 
+
+            card.querySelector('.edit-lead-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
                 openLeadFormModal(parseInt(card.dataset.leadId));
             });
-            
-            card.querySelector('.delete-lead-btn').addEventListener('click', (e) => { 
-                e.stopPropagation(); 
+
+            card.querySelector('.delete-lead-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
                 const leadId = parseInt(card.dataset.leadId);
                 const lead = leads.find(l => l.id === leadId);
                 if (confirm(`Tem certeza que deseja excluir o lead "${lead.name}"?`)) {
@@ -614,8 +486,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     lead.status = newStatus;
                     const systemMessage = `Status alterado para ${newStatus.toUpperCase()}.`;
                     lead.conversation.push({
-                        sender: 'system', 
-                        text: systemMessage, 
+                        sender: 'system',
+                        text: systemMessage,
                         time: new Date().toLocaleTimeString(),
                         source: 'system'
                     });
@@ -633,7 +505,7 @@ document.addEventListener('DOMContentLoaded', () => {
     formModalCloseBtn.addEventListener('click', () => leadFormModal.classList.remove('visible'));
     document.getElementById('nextActionSelect').addEventListener('change', updateActionTargetInput);
     leadForm.addEventListener('submit', saveLead);
-    
+
     sendBtn.addEventListener('click', sendMessage);
     messageInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -641,14 +513,14 @@ document.addEventListener('DOMContentLoaded', () => {
             sendMessage();
         }
     });
-    
+
     // Inicializar
     renderBoard();
     updateUndoButton();
-    if(leads.length > 0) {
+    if (leads.length > 0) {
         renderChat(leads[0].id);
     }
 
-    // Buscar mensagens iniciais
-    getTelegramUpdates();
+    // Sistema agora funciona apenas via webhook da Rosana.io
+    console.log('CRM v1.3 - Modo Webhook Only ativado');
 });
