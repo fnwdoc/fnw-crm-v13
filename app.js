@@ -54,29 +54,61 @@ document.addEventListener('DOMContentLoaded', () => {
         const { chatId, message, userName, source } = webhookData;
 
         // Encontrar lead correspondente pelo chatId
-        const lead = leads.find(l => l.telegramChatId === chatId);
-        if (lead) {
-            lead.conversation.push({
-                sender: source === 'rosana' ? 'rosana' : 'lead',
-                text: message,
-                time: new Date().toLocaleTimeString(),
-                source: source || 'rosana'
-            });
+        let lead = leads.find(l => l.telegramChatId === chatId);
 
-            // Destacar card com nova mensagem
-            const leadCard = document.querySelector(`[data-lead-id="${lead.id}"]`);
-            if (leadCard) {
-                leadCard.classList.add('new-message');
-                setTimeout(() => leadCard.classList.remove('new-message'), 5000);
-            }
+        // Se lead não existe, criar automaticamente
+        if (!lead) {
+            const newLead = {
+                id: new Date().getTime(),
+                name: userName || 'Lead Automático',
+                company: 'Via Rosana.io',
+                status: 'mql',
+                score: 50,
+                hyperForm: 0,
+                stratForm: 0,
+                verifyTM: 0,
+                notes: 'Lead criado automaticamente via webhook',
+                nextAction: '',
+                nextActionTarget: '',
+                telegramChatId: chatId,
+                telegramUsername: '',
+                conversation: [{
+                    sender: 'system',
+                    text: 'Lead criado automaticamente via Rosana.io',
+                    time: new Date().toLocaleTimeString(),
+                    source: 'system'
+                }]
+            };
 
-            // Se este lead está ativo, atualizar o chat
-            if (activeLeadId === lead.id) {
-                renderChat(lead.id);
-            }
+            leads.push(newLead);
+            lead = newLead;
 
-            showToast(`Nova mensagem de ${lead.name} via Rosana.io!`, 'success');
+            // Renderizar board para mostrar novo lead
+            renderBoard();
+            showToast(`Novo lead "${lead.name}" criado automaticamente!`, 'success');
         }
+
+        // Adicionar mensagem ao lead (existente ou novo)
+        lead.conversation.push({
+            sender: source === 'rosana' ? 'rosana' : 'lead',
+            text: message,
+            time: new Date().toLocaleTimeString(),
+            source: source || 'rosana'
+        });
+
+        // Destacar card com nova mensagem
+        const leadCard = document.querySelector(`[data-lead-id="${lead.id}"]`);
+        if (leadCard) {
+            leadCard.classList.add('new-message');
+            setTimeout(() => leadCard.classList.remove('new-message'), 5000);
+        }
+
+        // Se este lead está ativo, atualizar o chat
+        if (activeLeadId === lead.id) {
+            renderChat(lead.id);
+        }
+
+        showToast(`Nova mensagem de ${lead.name} via Rosana.io!`, 'success');
     };
 
     // Polling para verificar novos dados do webhook (simulação)
